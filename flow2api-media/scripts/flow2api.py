@@ -116,6 +116,29 @@ def resolve_video_model(quality, duration, aspect, has_images):
 # HTTP helpers
 # ---------------------------------------------------------------------------
 
+def _opener_for(url):
+    """Opener for talking to the Flow2API server.
+
+    urllib cannot speak SOCKS, but hosts that route Google traffic through a
+    SOCKS proxy (e.g. the Flow2API container itself) often export socks5://
+    proxy env vars. Drop those and keep plain HTTP(S) proxies. Localhost
+    never goes through a proxy.
+    """
+    host = (urlparse(url).hostname or "").lower()
+    if host in ("127.0.0.1", "localhost", "::1"):
+        return urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    proxies = {
+        scheme: proxy_url
+        for scheme, proxy_url in urllib.request.getproxies().items()
+        if not urlparse(proxy_url).scheme.lower().startswith("socks")
+    }
+    return urllib.request.build_opener(urllib.request.ProxyHandler(proxies))
+
+
+def urlopen(req, timeout):
+    return _opener_for(req.full_url).open(req, timeout=timeout)
+
+
 def base_url():
     return os.environ.get("FLOW2API_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
 
@@ -147,7 +170,7 @@ def http_json(method, path, payload=None, auth=True):
     headers = auth_headers() if auth else {"Content-Type": "application/json"}
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=READ_TIMEOUT) as resp:
+        with urlopen(req, timeout=READ_TIMEOUT) as resp:
             return resp.status, json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", "replace")
@@ -217,7 +240,7 @@ def generate(model, prompt, image_paths=None, extend_media_id=None):
     direct_url = None
     started = time.monotonic()
     try:
-        resp = urllib.request.urlopen(req, timeout=READ_TIMEOUT)
+        resp = urlopen(req, timeout=READ_TIMEOUT)
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", "replace")
         if exc.code == 401:
@@ -275,7 +298,7 @@ def download(url, out_path):
     """Download the generated file (the /tmp cache needs no auth)."""
     req = urllib.request.Request(url, headers={"User-Agent": "flow2api-skill/0.1"})
     try:
-        with urllib.request.urlopen(req, timeout=READ_TIMEOUT) as resp:
+        with urlopen(req, timeout=READ_TIMEOUT) as resp:
             data = resp.read()
     except urllib.error.URLError as exc:
         raise SystemExit(f"download failed for {url}: {exc.reason}")
