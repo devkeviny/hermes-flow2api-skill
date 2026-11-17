@@ -5,15 +5,33 @@ plus the alias resolver (`src/core/model_resolver.py`). The script composes thes
 ids from `--quality` / `--ar` / `--size` / `--duration`; `--model` accepts any id
 below verbatim.
 
+## What is "Nano Banana"?
+
+"Nano Banana" is Google's nickname for its Gemini image generation and
+editing family (official product name: Gemini Image). It is not one model —
+there are five, and the skill exposes three of them:
+
+| Nickname | Official name | Released | Character |
+|---|---|---|---|
+| Nano Banana | Gemini 2.5 Flash Image | Aug 2025 | The original; legacy now |
+| Nano Banana Pro | Gemini 3 Pro Image | Nov 2025 | Slowest, most precise, best text inside images; up to 4K |
+| Nano Banana 2 | Gemini 3.1 Flash Image | Feb 2026 | The fast workhorse; being replaced by 2.1 |
+| Nano Banana 2 Lite | Gemini 3.1 Flash-Lite Image | Jun 2026 | Fastest and cheapest |
+| Nano Banana 2.1 | Gemini Nano Banana 2.1 | Oct 2026 | The newest; Google's best everyday image model |
+
+There is no version literally called "Nano Banana 2.0" — the 2.x line is
+Nano Banana 2, 2 Lite and 2.1. Pro is a separate branch (precision), not a
+newer version of 2.
+
+### How the skill's flags map to them
+
+| Flag | Flow2API model id | Engine | Nano Banana |
+|---|---|---|---|
+| `--quality flash` (default) | `gemini-3.1-flash-image` | BELUGA | Nano Banana 2.1 |
+| `--quality pro` | `gemini-3.0-pro-image` | GEM_PIX_2 | Nano Banana Pro |
+| `--quality lite` | `gemini-3.1-flash-lite-image` | — | Nano Banana 2 Lite |
+
 ## Images
-
-Base models:
-
-| Quality flag | Base id | Engine |
-|---|---|---|
-| `flash` (default) | `gemini-3.1-flash-image` | BELUGA (Nano Banana 2.1) |
-| `pro` | `gemini-3.0-pro-image` | GEM_PIX_2 |
-| `lite` | `gemini-3.1-flash-lite-image` | BELUGA lite |
 
 Full id: `{base}-{aspect}` with optional `-2k` / `-4k` upscale suffix.
 
