@@ -31,6 +31,24 @@ newer version of 2.
 | `--quality pro` | `gemini-3.0-pro-image` | GEM_PIX_2 | Nano Banana Pro |
 | `--quality lite` | `gemini-3.1-flash-lite-image` | — | Nano Banana 2 Lite |
 
+### Nano Banana 2.1 — verified 24/nov/2026
+
+The `gemini-nano-banana-2.1` id (GA 6 Oct 2026, based on Gemini 3.6 Flash)
+exists ONLY in the direct Gemini API. In Flow, Google upgraded the engine
+behind the existing id: calling `gemini-3.1-flash-image` serves Nano Banana
+2.1. Evidence: the upstream flow2api author wrote it in
+`src/core/model_resolver.py` ("Nano Banana 2.1, with the existing Gemini 3.1
+alias retained"), and Google's rollout includes Flow. The `modelVersion`
+field in generation responses only echoes the requested id — it does not
+stamp the engine version, so there is no live string that says "2.1".
+Do not expect `gemini-nano-banana-2.1` to ever appear in this catalog.
+
+The catalog itself is HARDCODED in flow2api code (`MODEL_CONFIG` in
+`src/services/generation_handler.py` + `src/api/routes.py`) — it is not
+fetched live from Flow. A genuinely new model only appears after a code
+update. Upstream (`TheSmallHanCat/flow2api`) has been quiet since 17 Nov
+2026; our fork (`devkeviny/flow2api`) is in sync with it.
+
 ## Images
 
 Full id: `{base}-{aspect}` with optional `-2k` / `-4k` upscale suffix.

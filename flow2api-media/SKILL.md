@@ -1,14 +1,14 @@
 ---
 name: flow2api-media
-description: Generate images and videos via self-hosted Flow2API.
-version: 0.1.0
+description: Generate images and videos via self-hosted Flow2API. Pairs with nano-banana-prompts for prompt craft on layered composites (flyers, posters, show art).
+version: 0.2.0
 author: Kevinny (devkeviny), Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
 metadata:
   hermes:
     tags: [flow2api, image-generation, video-generation, veo, gemini]
-    related_skills: []
+    related_skills: [nano-banana-prompts]
 ---
 
 # Flow2API Media Generation
@@ -26,6 +26,18 @@ account's own Flow credits.
 - Do NOT use for: text chat, image analysis, or editing files — this skill
   only generates media.
 
+## Writing the prompt
+
+For a simple request, write the prompt directly in the command. For a
+layered composite — an event flyer, poster, or show art with cut-out
+artists, text plates, depth and a finished print look — use the
+**nano-banana-prompts** skill first: it defines the prompt as pseudo-code
+(`[VARIABLES]` + `[EXECUTION]`) with an explicit back-to-front layer stack,
+a dimension checklist, and the proven failure modes (the white-outline
+habit, layer-order drift, grain that must be asked for loudly). Then pass
+the finished prompt to the script below. This skill runs generations; the
+prompting skill writes them.
+
 ## Setup (one time)
 
 The script reads its credentials **only from the environment**. Never put the
@@ -39,6 +51,39 @@ API key in a file, a prompt, or a message.
 On the Hermes host the key lives in the Hermes-Agent service env vars
 (Coolify). If a call fails with `FLOW2API_API_KEY is not set` or a 401, tell
 the user the key is missing/wrong and stop — do not invent a key.
+
+### Running from Muse (this VM)
+
+Muse has no `FLOW2API_API_KEY` in its environment and must never ask the
+user to paste the key. Run the script **inside the flow2api container** over
+SSH, reading the key from the database in the same command (never print it):
+
+```bash
+# 1. Copy the script into the container (once per session is fine)
+scp -o ProxyCommand="nc -X connect -x 198.19.0.1:3128 %h %p" \
+  {baseDir}/scripts/flow2api.py \
+  root@134.65.224.241:/tmp/flow2api.py
+ssh -o ProxyCommand="nc -X connect -x 198.19.0.1:3128 %h %p" \
+  root@134.65.224.241 \
+  'docker cp /tmp/flow2api.py flow2api-headed-fs8og8g8ko4csows4cgko4k8:/tmp/flow2api.py'
+
+# 2. Run it: key from admin_config.api_key, base URL localhost
+#    (the generation args go on the python3 line, BEFORE the heredoc)
+ssh -o ProxyCommand="nc -X connect -x 198.19.0.1:3128 %h %p" \
+  root@134.65.224.241 \
+  'docker exec -i flow2api-headed-fs8og8g8ko4csows4cgko4k8 python3 - image --prompt "A cat astronaut" --out /tmp/cat.png <<PYEOF
+import os, sqlite3, subprocess, sys
+con = sqlite3.connect("file:/app/data/flow.db?mode=ro", uri=True)
+key = (con.execute("SELECT api_key FROM admin_config LIMIT 1").fetchone()[0] or "").strip()
+env = dict(os.environ, FLOW2API_API_KEY=key, FLOW2API_BASE_URL="http://127.0.0.1:8000")
+sys.exit(subprocess.call(["python3", "/tmp/flow2api.py"] + sys.argv[1:], env=env))
+PYEOF'
+```
+
+Always `docker exec -i` when the command reads stdin. Fetch the result with
+`docker cp` + `scp` and always LOOK at the image before delivering it.
+Direct SSH from the Muse VM never works — the ProxyCommand via the egress
+proxy is the route.
 
 ## Script
 
@@ -107,9 +152,16 @@ the user doesn't say otherwise:
 | "animate this image" | `video --image <file>` |
 | "continue this video" | `video --extend <MEDIA_ID>` |
 
-If the user names an exact model id (e.g. `veo_3_1_t2v_fast_8s`), pass it
+If the user names an exact model id (e.g. `gemini-3.1-flash-image-landscape-2k`), pass it
 with `--model` — it overrides quality/ar/duration. Full catalog:
 `references/models.md`.
+
+## Critical Invariants & Pitfalls
+
+- **NEVER substitute generation with local manual edits or mock compositions:** When the user explicitly requests image or video generation via Flow2API, do not fall back to local Photoshop/Pillow photo-manipulation or image compositing if Flow2API errors out. Doing so wastes extensive computational cycles and directly violates the user's explicit ask. Report the exact server/token error immediately so the user can resolve the underlying account/token issue.
+- **Check health on Token errors:** If the script returns `没有可用的Token进行图片生成` (no active tokens available), check `flow2api.py health`. If `tokens_expired > 0` or `has_active_tokens: false`, the Google session cookies in Flow2API expired (HTTP 401). Immediately notify the user to re-sync Google cookies in the Flow2API panel (`https://flow2api.kevinny.tech`), then stop.
+- **captcha_method must be `browser` for generation:** `personal` fails — Google redirects the container browser to the sign-in page and the reCAPTCHA token comes back empty (proven 24/nov). A raw SQL change of captcha_method does NOT take effect until a container restart (or the panel API, which hot-reloads). Never change it without the user's order.
+- **A generation takes ~75–130s.** Do not treat a slow call as hung.
 
 ## After Generation
 
